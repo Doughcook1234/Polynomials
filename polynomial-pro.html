@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polynomial Pro</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f4f6fb;color:#182033}
+header{background:#182033;color:white;padding:22px 20px;text-align:center}
+header h1{margin:0;font-size:28px} header p{margin:6px 0 0;color:#cbd3e6}
+main{max-width:1000px;margin:24px auto;padding:0 16px}
+.card{background:white;border-radius:18px;padding:22px;box-shadow:0 6px 24px #18203318;margin-bottom:18px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+button{border:0;border-radius:10px;padding:11px 16px;font-weight:700;cursor:pointer;background:#e8ecf5;color:#182033}
+button.active,button.primary{background:#182033;color:white}
+input{width:100%;font-size:20px;padding:14px;border:2px solid #dce1ec;border-radius:12px;outline:none}
+input:focus{border-color:#596bff}
+.row{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center}
+.op{font-size:25px;font-weight:800;text-align:center}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.result{background:#f7f8fc;border-radius:14px;padding:18px;font-size:24px;overflow:auto}
+.steps{line-height:1.7}
+.step{padding:10px 0;border-bottom:1px solid #e6e9f0}
+.examples{display:flex;gap:8px;flex-wrap:wrap}
+.example{font-size:14px}
+.error{color:#b42318;background:#fff1f0;padding:12px;border-radius:10px;margin-top:12px}
+.hint{font-size:14px;color:#687086;margin-top:8px}
+@media(max-width:650px){.row{grid-template-columns:1fr}.op{order:2}.row input:last-child{order:3}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Polynomial Pro</h1>
+  <p>Add • Subtract • Multiply • Divide polynomials</p>
+</header>
+
+<main>
+  <section class="card">
+    <div class="tabs">
+      <button class="active" data-op="+">Add</button>
+      <button data-op="-">Subtract</button>
+      <button data-op="*">Multiply</button>
+      <button data-op="/">Divide</button>
+    </div>
+
+    <div class="row">
+      <input id="a" value="x² + 3x + 2" aria-label="First polynomial">
+      <div class="op" id="op">+</div>
+      <input id="b" value="x + 1" aria-label="Second polynomial">
+    </div>
+    <div class="hint">Use x, x², x^3, coefficients, parentheses, and fractions such as 1/2.</div>
+
+    <div class="actions">
+      <button class="primary" id="calculate">Calculate</button>
+      <button id="clear">Clear</button>
+    </div>
+
+    <div id="error"></div>
+  </section>
+
+  <section class="card">
+    <h2>Answer</h2>
+    <div class="result" id="result">x² + 4x + 3</div>
+  </section>
+
+  <section class="card">
+    <h2>Work</h2>
+    <div class="steps" id="steps">
+      <div class="step">Enter two polynomials and press <b>Calculate</b>.</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Try an example</h2>
+    <div class="examples">
+      <button class="example" data-a="(x + 3)(x - 2)" data-b="1" data-op="*">Multiply binomials</button>
+      <button class="example" data-a="x² + 5x + 6" data-b="x + 2" data-op="/">Divide</button>
+      <button class="example" data-a="x² + 5x + 6" data-b="2x² - x + 4" data-op="+">Add</button>
+      <button class="example" data-a="3x² - 7x + 2" data-b="x² + x - 5" data-op="-">Subtract</button>
+    </div>
+  </section>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+let currentOp="+";
+
+document.querySelectorAll(".tabs button").forEach(btn=>{
+  btn.onclick=()=>{
+    currentOp=btn.dataset.op;
+    document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    $("op").textContent=currentOp==="*"?"×":currentOp;
+  };
+});
+
+function gcd(a,b){a=Math.abs(a);b=Math.abs(b);while(b){[a,b]=[b,a%b]}return a||1}
+function frac(n,d=1){
+  if(d===0)throw Error("Division by zero.");
+  if(d<0){n=-n;d=-d}
+  let g=gcd(n,d); return {n:n/g,d:d/g};
+}
+function addF(a,b){return frac(a.n*b.d+b.n*a.d,a.d*b.d)}
+function mulF(a,b){return frac(a.n*b.n,a.d*b.d)}
+function negF(a){return frac(-a.n,a.d)}
+function isZero(a){return a.n===0}
+function fstr(f){
+  if(f.d===1)return String(f.n);
+  return f.n+"/"+f.d;
+}
+
+function tokenize(s){
+  s=s.replace(/[−–]/g,"-").replace(/²/g,"^2").replace(/³/g,"^3")
+     .replace(/\s+/g,"").toLowerCase();
+  // Turn implicit multiplication into explicit multiplication.
+  s=s.replace(/(\d|\)|x)(?=\()/g,"$1*")
+     .replace(/(\d|\))(?=x)/g,"$1*")
+     .replace(/x(?=\d)/g,"x*");
+  let out=[],i=0;
+  while(i<s.length){
+    let c=s[i];
+    if(/[0-9.]/.test(c)){
+      let j=i;
+      while(j<s.length && /[0-9.]/.test(s[j]))j++;
+      let raw=s.slice(i,j);
+      if((raw.match(/\./g)||[]).length>1)throw Error("Invalid number.");
+      if(raw.includes(".")){
+        let parts=raw.split("."), d=10**parts[1].length, n=Number(parts[0]||0)*d+Number(parts[1]||0);
+        out.push({t:"num",v:frac(n,d)});
+      }else out.push({t:"num",v:frac(Number(raw))});
+      i=j; continue;
+    }
+    if(c==="x"){out.push({t:"x"});i++;continue}
+    if("+-*/^()".includes(c)){out.push({t:c});i++;continue}
+    throw Error("Unsupported character: "+c);
+  }
+  return out;
+}
+
+function polyConst(f){return {0:f}}
+function polyAdd(a,b){
+  let r={...a};
+  for(let [k,v] of Object.entries(b)) r[k]=addF(r[k]||frac(0),v);
+  return clean(r);
+}
+function polyNeg(a){let r={};for(let [k,v] of Object.entries(a))r[k]=negF(v);return r}
+function polySub(a,b){return polyAdd(a,polyNeg(b))}
+function polyMul(a,b){
+  let r={};
+  for(let [ka,va] of Object.entries(a))for(let [kb,vb] of Object.entries(b)){
+    let k=+ka + +kb; r[k]=addF(r[k]||frac(0),mulF(va,vb));
+  } return clean(r);
+}
+function polyPow(a,n){
+  if(n<0)throw Error("Negative polynomial powers are not supported.");
+  let r=polyConst(frac(1)); for(let i=0;i<n;i++)r=polyMul(r,a); return r;
+}
+function clean(p){for(let k of Object.keys(p))if(isZero(p[k]))delete p[k];return p}
+function degree(p){let ks=Object.keys(p).map(Number);return ks.length?Math.max(...ks):-Infinity}
+function divPoly(a,b){
+  if(degree(b)<0)throw Error("Cannot divide by zero.");
+  let q={},r={...a}, db=degree(b), lb=b[db];
+  while(degree(r)>=db){
+    let dr=degree(r), c=mulF(r[dr],frac(lb.d,lb.n)), k=dr-db;
+    q[k]=addF(q[k]||frac(0),c);
+    let sub={}; for(let [e,v] of Object.entries(b))sub[+e+k]=mulF(v,c);
+    r=polySub(r,sub);
+  }
+  return {q:clean(q),r:clean(r)};
+}
+
+function parse(s){
+  let t=tokenize(s),p=0;
+  function primary(){
+    if(t[p]?.t==="+"){p++;return primary()}
+    if(t[p]?.t==="-"){p++;return polyNeg(primary())}
+    if(t[p]?.t==="num"){let v=t[p++].v;return polyConst(v)}
+    if(t[p]?.t==="x"){
+      p++;
+      if(t[p]?.t==="^"){p++;if(t[p]?.t!=="num"||t[p].v.d!==1)throw Error("Exponent must be a whole number.");let n=t[p++].v.n;return {[n]:frac(1)}}
+      return {1:frac(1)}
+    }
+    if(t[p]?.t==="("){p++;let r=expr();if(t[p]?.t!==")")throw Error("Missing closing parenthesis.");p++;return r}
+    throw Error("Expected a number, x, or (.");
+  }
+  function power(){let r=primary();while(t[p]?.t==="^"){p++;if(t[p]?.t!=="num")throw Error("Invalid exponent.");let n=t[p++].v.n;r=polyPow(r,n)}return r}
+  function term(){let r=power();while(t[p]?.t==="*"||t[p]?.t==="/"){let op=t[p++].t,b=power();if(op==="*")r=polyMul(r,b);else{if(degree(b)!==0)throw Error("For division, the divisor must be a constant here. Use the Divide operation for polynomial long division.");r=polyMul(r,polyConst(frac(b[0].d,b[0].n)))}}return r}
+  function expr(){let r=term();while(t[p]?.t==="+"||t[p]?.t==="-"){let op=t[p++].t,b=term();r=op==="+"?polyAdd(r,b):polySub(r,b)}return r}
+  let r=expr();if(p<t.length)throw Error("Unexpected symbol.");return clean(r);
+}
+
+function polyStr(p){
+  let d=degree(p); if(d<0)return "0";
+  let parts=[];
+  for(let e=d;e>=0;e--){
+    let c=p[e]; if(!c||isZero(c))continue;
+    let neg=c.n<0, abs=frac(Math.abs(c.n),c.d), coeff=fstr(abs);
+    let term;
+    if(e===0)term=coeff;
+    else{
+      let power=e===1?"x":"x"+(e===2?"²":e===3?"³":"^"+e);
+      if(abs.n===1 && abs.d===1)term=power; else term=coeff+power;
+    }
+    parts.push((parts.length?(neg?" − ":" + "):(neg?"−":""))+term);
+  } return parts.join("")||"0";
+}
+function polyTerms(p){
+  return Object.keys(p).map(Number).sort((a,b)=>b-a).map(e=>({e,c:p[e]}));
+}
+
+function calculate(){
+  $("error").innerHTML="";
+  try{
+    let a=parse($("a").value),b=parse($("b").value),ans,steps=[];
+    if(currentOp==="+"){
+      ans=polyAdd(a,b);steps.push(`Combine like terms from <b>${polyStr(a)}</b> and <b>${polyStr(b)}</b>.`);
+    }else if(currentOp==="-"){
+      ans=polySub(a,b);steps.push(`Distribute the minus sign: <b>${polyStr(b)}</b> becomes <b>${polyStr(polyNeg(b))}</b>.`);
+      steps.push(`Then combine like terms.`);
+    }else if(currentOp==="*"){
+      ans=polyMul(a,b);steps.push(`Multiply every term of <b>${polyStr(a)}</b> by every term of <b>${polyStr(b)}</b>.`);
+      steps.push(`Add the resulting like terms.`);
+    }else{
+      let d=divPoly(a,b);ans=d.q;
+      steps.push(`Divide the leading term of the dividend by the leading term of the divisor.`);
+      steps.push(`Subtract the resulting multiple of the divisor and repeat until the remainder has lower degree.`);
+      if(degree(d.r)>=0)steps.push(`Remainder: <b>${polyStr(d.r)}</b>`);
+      else steps.push(`Remainder: <b>0</b>`);
+      $("result").innerHTML=polyStr(d.q)+(degree(d.r)>=0?" &nbsp; remainder &nbsp; "+polyStr(d.r):"");
+      $("steps").innerHTML=steps.map((s,i)=>`<div class="step"><b>${i+1}.</b> ${s}</div>`).join("");
+      return;
+    }
+    $("result").textContent=polyStr(ans);
+    steps.push(`<b>Answer:</b> ${polyStr(ans)}`);
+    $("steps").innerHTML=steps.map((s,i)=>`<div class="step"><b>${i+1}.</b> ${s}</div>`).join("");
+  }catch(e){
+    $("result").textContent="—";
+    $("steps").innerHTML="";
+    $("error").innerHTML=`<div class="error">${e.message}</div>`;
+  }
+}
+$("calculate").onclick=calculate;
+$("clear").onclick=()=>{$("a").value="";$("b").value="";$("result").textContent="—";$("steps").innerHTML="";$("error").innerHTML=""};
+document.querySelectorAll(".example").forEach(b=>b.onclick=()=>{
+  $("a").value=b.dataset.a;$("b").value=b.dataset.b;
+  currentOp=b.dataset.op;
+  document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("active",x.dataset.op===currentOp));
+  $("op").textContent=currentOp==="*"?"×":currentOp;
+  calculate();
+});
+calculate();
+</script>
+</body>
+</html>
